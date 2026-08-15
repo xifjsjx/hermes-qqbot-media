@@ -1,45 +1,45 @@
 # hermes-qqbot-media
 
-Hermes Agent plugin — enable native image/video/voice/file sending for the QQ Bot channel via the official QQ Bot API v2.
+Hermes Agent 插件 — 为 QQ Bot 通道启用原生图片/视频/语音/文件发送能力。
 
-## Problem
+## 问题
 
-Hermes's built-in `send_message` tool cannot send file attachments through the QQ Bot adapter — only plain text and markdown. This plugin bridges that gap by hooking into the send pipeline and using QQ's native file upload API.
+Hermes 内置的 `send_message` 工具在 QQ Bot 通道上只能发送纯文本和 Markdown，无法发送文件附件。本插件通过拦截发送管道并使用 QQ 原生文件上传 API 来解决这个问题。
 
-## Features
+## 功能
 
-- **Image**: jpg / jpeg / png / webp / gif
-- **Video**: mp4 / mov / avi / mkv / 3gp
-- **Voice**: ogg / opus (auto-detected)
-- **File**: any format (pdf / docx / xlsx / md / etc.)
-- Auto type detection by extension
-- Files ≤10 MB sent as base64; larger files rejected with clear error
-- Dual fallback: C2C first, then group
-- Preserves original `send_message` semantics (returns `message_id`)
+- **图片**：jpg / jpeg / png / webp / gif
+- **视频**：mp4 / mov / avi / mkv / 3gp
+- **语音**：ogg / opus（自动识别）
+- **文件**：任意格式（pdf / docx / xlsx / md 等）
+- 按扩展名自动判断文件类型
+- 10 MB 以内文件使用 base64 直传，超出后返回明确错误
+- 双回退机制：优先 C2C，失败后尝试群聊
+- 保持原有 `send_message` 语义（返回 `message_id`）
 
-## Installation
+## 安装
 
-1. Copy `plugin.yaml` and `__init__.py` to `~/.hermes/plugins/qqbot-media/`
-2. Restart Hermes gateway: `hermes gateway restart`
+1. 将 `plugin.yaml` 和 `__init__.py` 复制到 `~/.hermes/plugins/qqbot-media/`
+2. 重启 Hermes 网关：`hermes gateway restart`
 
-## Configuration
+## 配置
 
-Set via environment variables or `config.yaml` under `platforms.qqbot.extra`:
+通过环境变量或在 `config.yaml` 的 `platforms.qqbot.extra` 中设置：
 
 ```bash
-export QQ_APP_ID="your-app-id"
-export QQ_CLIENT_SECRET="your-app-secret"
+export QQ_APP_ID="你的AppID"
+export QQ_CLIENT_SECRET="你的AppSecret"
 ```
 
-## Usage
+## 用法
 
-Use Hermes's standard `MEDIA:/abs/path/to/file` syntax in `send_message`. The plugin transparently intercepts media files and routes them through QQ's native upload API.
+在 Hermes 的 `send_message` 中使用标准的 `MEDIA:/abs/path/to/file` 语法，插件会透明地拦截媒体文件并通过 QQ 原生上传 API 发送。
 
-## Requirements
+## 依赖
 
 - Hermes Agent ≥ v0.20.0
-- `httpx` (usually bundled with Hermes)
+- `httpx`（通常已随 Hermes 安装）
 
-## License
+## 协议
 
 MIT
