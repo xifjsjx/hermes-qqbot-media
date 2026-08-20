@@ -1,3 +1,3 @@
 name: qqbot-media
-version: 1.0.0
-description: Enable image/file sending for QQbot channel via send_message tool
+version: 1.1.0
+description: Enable image/file sending and a MEME: sticker library for QQbot channel via send_message tool

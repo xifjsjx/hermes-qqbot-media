@@ -1,9 +1,15 @@
-"""QQBot Media Plugin -- enable image/file sending for QQbot channel."""
+"""QQBot Media Plugin -- enable image/file sending for QQbot channel.
+
+v1.1.0: added MEME:<keyword> syntax -- send stickers/memes from a local
+library directory by matching filenames, plus MEME:random and MEME:list.
+"""
 
 import asyncio
 import base64
 import logging
 import os
+import random
+import re
 from pathlib import Path
 
 logger = logging.getLogger(__name__)
@@ -21,6 +27,14 @@ _VOICE_EXTS = {".ogg", ".opus"}
 
 _MAX_BASE64_SIZE = 10 * 1024 * 1024
 
+# ---- meme library ----
+_MEME_DIR = os.path.expanduser(os.getenv("QQ_MEME_DIR", "~/.hermes/memes"))
+_MEME_EXTS = _IMAGE_EXTS | _VIDEO_EXTS
+# MEME:keyword -- keyword runs until whitespace or trailing punctuation
+_MEME_TOKEN_RE = re.compile(r"MEME:([^\s，。！？；、,.!?;]+)")
+_MEME_LIST_WORDS = {"list", "ls", "?", "？", "列表"}
+_MEME_RANDOM_WORDS = {"random", "rand", "随机", "随便"}
+
 
 def _guess_file_type(media_path: str, is_voice: bool) -> int:
     ext = os.path.splitext(media_path)[1].lower()
@@ -37,6 +51,41 @@ def _guess_file_type(media_path: str, is_voice: bool) -> int:
 
 def _is_url(path: str) -> bool:
     return path.startswith(("http://", "https://", "ftp://"))
+
+
+def _meme_library() -> dict:
+    """Scan the meme dir, return {filename_stem: absolute_path}."""
+    lib = {}
+    d = Path(_MEME_DIR)
+    if not d.is_dir():
+        return lib
+    for p in sorted(d.iterdir()):
+        if p.is_file() and p.suffix.lower() in _MEME_EXTS:
+            lib[p.stem] = str(p)
+    return lib
+
+
+def _meme_listing(lib: dict) -> str:
+    if not lib:
+        return f"表情包库为空（目录：{_MEME_DIR}）"
+    names = "、".join(sorted(lib))
+    return f"表情包库共 {len(lib)} 个：{names}"
+
+
+def _resolve_meme(keyword: str, lib: dict):
+    """Exact stem match first; otherwise pick a random substring match.
+
+    Returns (path, stem) or (None, None) when nothing matches.
+    """
+    kw = keyword.lower()
+    for stem, path in lib.items():
+        if stem.lower() == kw:
+            return path, stem
+    matches = [(s, p) for s, p in lib.items() if kw and kw in s.lower()]
+    if matches:
+        stem, path = random.choice(matches)
+        return path, stem
+    return None, None
 
 
 async def _get_qq_token(appid: str, secret: str) -> str | None:
@@ -139,11 +188,53 @@ def register(ctx):
         media_files=None,
         force_document=False,
     ):
-        media_files = media_files or []
-        if platform.value == "qqbot" and media_files:
-            return await _send_qqbot_with_media(
-                pconfig, chat_id, message, media_files, force_document=force_document
-            )
+        media_files = list(media_files or [])
+        message = message or ""
+
+        if platform.value == "qqbot":
+            keywords = _MEME_TOKEN_RE.findall(message)
+            if keywords:
+                lib = _meme_library()
+
+                if any(k.lower() in _MEME_LIST_WORDS for k in keywords):
+                    # MEME:list -> reply with the library index as plain text
+                    message = _MEME_TOKEN_RE.sub("", message).strip()
+                    listing = _meme_listing(lib)
+                    message = f"{message}\n{listing}".strip()
+                else:
+                    resolved, unresolved = [], []
+                    for kw in keywords:
+                        if kw.lower() in _MEME_RANDOM_WORDS:
+                            if lib:
+                                resolved.append(random.choice(list(lib.values())))
+                            else:
+                                unresolved.append(kw)
+                            continue
+                        path, _stem = _resolve_meme(kw, lib)
+                        if path:
+                            resolved.append(path)
+                        else:
+                            unresolved.append(kw)
+                    if unresolved:
+                        return {
+                            "error": (
+                                f"表情包库中未找到：{'、'.join(unresolved)}。"
+                                + _meme_listing(lib)
+                            )
+                        }
+                    for path in dict.fromkeys(resolved):  # dedupe, keep order
+                        media_files.append((path, False))
+                    message = _MEME_TOKEN_RE.sub("", message).strip()
+
+            if media_files:
+                return await _send_qqbot_with_media(
+                    pconfig,
+                    chat_id,
+                    message,
+                    media_files,
+                    force_document=force_document,
+                )
+
         return await _original_send_to_platform(
             platform,
             pconfig,
@@ -155,7 +246,7 @@ def register(ctx):
         )
 
     smt._send_to_platform = _patched_send_to_platform
-    logger.info("QQBot media plugin installed")
+    logger.info("QQBot media plugin installed (meme dir: %s)", _MEME_DIR)
 
 
 async def _send_qqbot_with_media(
